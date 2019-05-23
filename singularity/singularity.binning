@@ -14,7 +14,7 @@
 # bootstrap: docker
 # from: ubuntu:19.04
 
-BootStrap: library
+BootStrap: docker
 From: ubuntu:16.04
 
 
@@ -29,7 +29,7 @@ From: ubuntu:16.04
     locale-gen --purge "en_US.UTF-8"
     update-locale LANG="en_US.UTF-8"
 
-    apt-get install -y wget curl locales
+    apt-get install -y wget curl
     apt-get install -y build-essential
 
 
