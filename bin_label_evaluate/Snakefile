@@ -59,7 +59,7 @@ rule bwa_index:
     log:
         join(outdir, "{samp}/logs/bwa_index.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=8,
         time=2
@@ -82,7 +82,7 @@ rule bwa_align:
     log:
         join(outdir, "{samp}/logs/bwa_mem.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=16,
         time=12
@@ -100,7 +100,7 @@ rule align_lr:
     output:
         join(outdir, "{samp}/{samp}_lr.bam")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=48,
         time=6
@@ -117,7 +117,7 @@ rule metabat_pre:
     output:
         join(outdir, "{samp}/{samp}.fa.depth.txt")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     shell: """
         jgi_summarize_bam_contig_depths --outputDepth {samp}/{samp}.fa.depth.txt --pairedContigs {samp}/{samp}.fa.paired.txt --minContigLength 1000 --minContigDepth 1  {input} --percentIdentity 50
         """
@@ -129,7 +129,7 @@ checkpoint metabat:
     output:
         directory(join(outdir, "{samp}/bins/")) #the number of bins is unknown prior to execution
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=64,
         time=24
@@ -146,7 +146,7 @@ rule checkm:
     log:
         join(outdir, "{samp}/logs/checkm.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.checkm"
+        "shub://bsiranos/bin_genomes/singularity:checkm"
     resources:
         mem=128,
         time=24
@@ -164,7 +164,7 @@ rule aragorn:
     log:
         join(outdir, "{samp}/logs/aragorn_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=8,
         time=1
@@ -179,7 +179,7 @@ rule barrnap:
     log:
         join(outdir, "{samp}/logs/barrnap_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=8,
         time=1
@@ -194,7 +194,7 @@ rule quast:
     log:
         join(outdir, "{samp}/logs/quast_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=8,
         time=1
@@ -210,7 +210,7 @@ rule prokka:
     log:
         join(outdir, "{samp}/logs/prokka_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=48,
         time=1,
@@ -227,7 +227,7 @@ rule bam_idx:
     log:
         join(outdir, "{samp}/logs/bamidx.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=2,
         time=2
@@ -243,7 +243,7 @@ rule bam_idxstats:
     log:
         join(outdir, "{samp}/logs/bamidxstats.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=2,
         time=2
@@ -259,7 +259,7 @@ rule bin_idxstats:
     log:
         join(outdir, "{samp}/logs/coverage_idxstats_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=2,
         time=1
@@ -274,7 +274,7 @@ rule bin_coverage:
     log:
         join(outdir, "{samp}/logs/coverage_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=2,
         time=1
@@ -291,7 +291,7 @@ rule fasta_index:
     log:
         join(outdir, "{samp}/logs/faidx_{bin}.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     resources:
         mem=8,
         time=1
@@ -308,7 +308,7 @@ rule kraken2:
     log:
         join(outdir, "{samp}/logs/kraken_class.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     params: 
         db = config['kraken2db']
     resources:
@@ -329,7 +329,7 @@ rule label_bins:
     log:
         join(outdir, "{samp}/logs/assign_species.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     script:
         "scripts/assign_species.py"
 
@@ -382,7 +382,7 @@ rule postprocess_final:
     log:
         join(outdir, "{samp}/logs/postprocess.log")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     script:
         "scripts/join_final_tables.R"
 
@@ -392,6 +392,6 @@ rule bin_tig_mapping:
     output:
         join(outdir, "{samp}/final/bin_tig_mapping.tsv")
     singularity:
-        "shub://bsiranos/bin_genomes/singularity.binning"
+        "shub://bsiranos/bin_genomes/singularity:binning"
     shell:
         "ls {samp}/bins/ | grep fai  | xargs -n 1 -I foo sh -c \"cat {samp}/bins/foo | sed 's/^/foo\t/g' \" | sed 's/.fa.fai//g' | cut -f1,2 > {output}"
