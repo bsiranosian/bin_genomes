@@ -26,9 +26,11 @@ From: ubuntu:16.04
 
     # checkm install 
     pip install checkm-genome
+    mkdir checkm_data
+    cd checkm_data
     wget https://data.ace.uq.edu.au/public/CheckM_databases/checkm_data_2015_01_16.tar.gz
     tar xvfz checkm_data_2015_01_16.tar.gz
-    echo "." | checkm data setRoot
+    yes "." | checkm data setRoot
 
 %runscript
    exec /bin/bash
