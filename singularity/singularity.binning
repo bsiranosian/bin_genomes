@@ -53,7 +53,7 @@ From: ubuntu:16.04
     # requirements for mgwf workflow 
     conda install -y -c conda-forge -c bioconda -c ursky python=3.6 minimap2 \
     readline=6.2 r-ggplot2 r-doBy r-circlize prodigal aragorn metabat2 barrnap \
-    prokka samtools ncurses bedtools kraken2 bwa pip
+    prokka samtools ncurses bedtools kraken2 bwa pip kraken2
     
     # manual quast installation 
     apt-get install -y zlib1g-dev
@@ -63,7 +63,6 @@ From: ubuntu:16.04
     cd quast-5.0.2
     ./setup.py install
     echo "alias quast=~/quast-5.0.2/quast.py" >> ~/.bashrc 
-    source ~/.bashrc
     cd 
 
     pip install snakemake

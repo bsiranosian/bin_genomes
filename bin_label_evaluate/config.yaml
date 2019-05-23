@@ -1,7 +1,13 @@
-assembly: contigs.fasta
-sample: samplename
-reads1: reads_1.fq.gz
-reads2: reads_2.fq.gz #omit for single-ended or long reads
-krakendb: /labs/asbhatt/data/program_indices/kraken2/kraken_custom_jan2019/genbank_custom
+assembly: /abs/path/asm/mysamp.fa
+# smaple name. Will create a folder with this in outdir_base 
+# for all the reuslts of binning this sample
+sample: mysamp
+# base output directory. Will create direcrorties within for each sample you do this for
+outdir_base: /abs/path/binning
+
+reads1: /abs/path/reads_1.fq.gz
+reads2: /abs/path/reads_2.fq.gz
+
+kraken2db: /labs/asbhatt/data/program_indices/kraken2/kraken_custom_feb2019/genbank_genome_chromosome_scaffold/
 read_length: 150 #mean read length
 long_read: False
