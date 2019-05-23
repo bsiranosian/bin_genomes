@@ -22,8 +22,11 @@ From: ubuntu:16.04
     fi
         export PATH="/usr/local/anaconda/bin:$PATH"
 
-    # requirements for mgwf workflow 
-    conda install -y -c conda-forge -c bioconda -c ursky checkm-genome
+    # checkm install 
+    pip install checkm-genome
+    wget https://data.ace.uq.edu.au/public/CheckM_databases/checkm_data_2015_01_16.tar.gz
+    tar xvfz checkm_data_2015_01_16.tar.gz
+    echo "." | checkm data setRoot
 
     # pip install snakemake
     # pip install pysam
