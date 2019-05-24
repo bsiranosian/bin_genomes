@@ -86,7 +86,7 @@ rule bwa_align:
     resources:
         mem=16,
         time=12
-    threads: 24
+    threads: 8
     shell: """
         bwa mem -t {threads} {input.asm}  {input.reads} |samtools sort --threads {threads} > {output}
         """
@@ -115,11 +115,12 @@ rule metabat_pre:
     input:
         join(outdir, "{samp}/{samp}_lr.bam") if long_read else join(outdir, "{samp}/{samp}.bam") #choose a long read alignment or short read alignment
     output:
-        join(outdir, "{samp}/{samp}.fa.depth.txt")
+        single = join(outdir, "{samp}/{samp}.fa.depth.txt"),
+        paired = join(outdir, "{samp}/{samp}.fa.paired.txt"),
     singularity:
         "shub://bsiranosian/bin_genomes:binning"
     shell: """
-        jgi_summarize_bam_contig_depths --outputDepth {samp}/{samp}.fa.depth.txt --pairedContigs {samp}/{samp}.fa.paired.txt --minContigLength 1000 --minContigDepth 1  {input} --percentIdentity 50
+        jgi_summarize_bam_contig_depths --outputDepth {output.single} --pairedContigs {output.paired} --minContigLength 1000 --minContigDepth 1  {input} --percentIdentity 50
         """
 
 checkpoint metabat:
@@ -150,7 +151,7 @@ rule checkm:
     resources:
         mem=128,
         time=24
-    threads: 24
+    threads: 8
     shell: """
         rm -rf {samp}/checkm/*
         checkm lineage_wf -t {threads} -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm
