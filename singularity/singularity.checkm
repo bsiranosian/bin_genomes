@@ -22,7 +22,7 @@ From: ubuntu:16.04
     fi
         export PATH="/usr/local/anaconda/bin:$PATH"
 
-    conda install -y python=2.7
+    conda install -y -c bioconda python=2.7 hmmer prodigal pplacer 
 
     # checkm install 
     pip install checkm-genome
@@ -34,4 +34,3 @@ From: ubuntu:16.04
 
 %runscript
    exec /bin/bash
-    
