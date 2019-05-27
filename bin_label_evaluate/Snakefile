@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from os.path import join, abspath, expanduser
 
-localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, bin_tig_mapping, metabat, fasta_index
+localrules: bwa_index_setup, postprocess_raw, postprocess_simplify, postprocess_final, label_bins, bin_tig_mapping, metabat, fasta_index
 
 samp = config['sample']
 outdir = config['outdir_base']
@@ -30,7 +30,9 @@ rule all:
         reads,
         config['assembly'],
         config['kraken2db'],
+        expand(join(outdir, "{samp}/classify/bin_species_calls.tsv"), samp = config['sample']),
         expand(join(outdir, "{samp}/final/{samp}.tsv"), samp = config['sample']),
+        expand(join(outdir, "{samp}/final/{samp}_simple.tsv"), samp = config['sample']),
 
 rule bwa_index_setup:
     input:
@@ -41,10 +43,8 @@ rule bwa_index_setup:
         mem=1,
         time=1
     threads: 1
-    params:
-        asm = config['assembly']
     shell: """
-        cp {params.asm} {output}
+        cp {input} {output}
         """
 
 rule bwa_index:
@@ -125,8 +125,8 @@ rule metabat_pre:
 
 checkpoint metabat:
     input:
-        join(outdir, "{samp}/idx/{samp}.fa"),
-        rules.metabat_pre.output
+        asm = join(outdir, "{samp}/idx/{samp}.fa"),
+        depth = join(outdir, "{samp}/{samp}.fa.depth.txt"),
     output:
         directory(join(outdir, "{samp}/bins/")) #the number of bins is unknown prior to execution
     singularity:
@@ -135,8 +135,10 @@ checkpoint metabat:
         mem=64,
         time=24
     threads: 4
+    params:
+        outstring = join(outdir, "{samp}/bins/bin")
     shell: """
-        metabat2 --seed 1 -t {threads} --unbinned --inFile {samp}/idx/{samp}.fa --outFile {samp}/bins/bin --abdFile {samp}/{samp}.fa.depth.txt
+        metabat2 --seed 1 -t {threads} --unbinned --inFile {input.asm} --outFile {params.outstring} --abdFile {input.depth}
         """
 
 rule checkm:
@@ -152,9 +154,12 @@ rule checkm:
         mem=128,
         time=24
     threads: 8
+    params:
+        binfolder = join(outdir, "{samp}/bins/"),
+        checkmfolder = join(outdir, "{samp}/checkm/"),
     shell: """
         rm -rf {samp}/checkm/*
-        checkm lineage_wf -t {threads} -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm
+        checkm lineage_wf -t {threads} -x fa --tab_table -f {output} {params.binfolder} {params.checkmfolder}
         """
 
 rule aragorn:
@@ -199,9 +204,12 @@ rule quast:
     resources:
         mem=8,
         time=1
-    shell:
-        "quast.py -o {samp}/quast/{wildcards.bin}.fa/ {input} " +
-        "--contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast "
+    params:
+        quastfolder = join(outdir, "{samp}/quast/{bin}.fa/"),
+        thresholds = "0,10000,50000,100000,250000,500000,1000000,2000000,3000000"
+    shell: """
+        quast.py -o {params.quastfolder} {input} --contig-thresholds {params.thresholds} --fast
+        """
 
 rule prokka:
     input:
@@ -216,9 +224,13 @@ rule prokka:
         mem=48,
         time=1,
     threads: 8
-    shell:
-        "prokka {input} --outdir {samp}/prokka/{wildcards.bin}.fa " +
-        "--prefix {samp}_{wildcards.bin}.fa --centre X --compliant --force --cpus {threads} --noanno"
+    params:
+        prokkafolder = join(outdir, "{samp}/prokka/{bin}.fa"),
+        prefix = "{samp}_{bin}.fa"
+    shell: """
+        prokka {input} --outdir {params.prokkafolder} --prefix {params.prefix} \
+        --centre X --compliant --force --cpus {threads} --noanno
+        """
 
 rule bam_idx:
     input:
@@ -323,20 +335,23 @@ rule kraken2:
 
 rule label_bins:
     input:
-        rules.kraken2.output,
-        lambda wildcards: expand(rules.fasta_index.output, bin = get_bins(wildcards), samp = wildcards.samp)
+        krak = join(outdir, "{samp}/classify/{samp}.krak"),
+        bins = lambda wildcards: expand(join(outdir, "{samp}/bins/{bin}.fa.fai"),
+                                        bin = get_bins(wildcards), samp = wildcards.samp)
     output:
         join(outdir, "{samp}/classify/bin_species_calls.tsv")
     log:
         join(outdir, "{samp}/logs/assign_species.log")
     singularity:
         "shub://bsiranosian/bin_genomes:binning"
+    params: 
+        binfolder = join(outdir, "{samp}/bins/")
     script:
         "scripts/assign_species.py"
 
 rule postprocess_raw:
     input:
-        rules.checkm.output,
+        join(outdir, "{samp}/checkm/checkm.tsv"),
         lambda wildcards: expand(rules.prokka.output, bin = get_bins(wildcards), samp = wildcards.samp),
         lambda wildcards: expand(rules.quast.output, bin = get_bins(wildcards), samp = wildcards.samp),
         lambda wildcards: expand(rules.aragorn.output, bin = get_bins(wildcards), samp = wildcards.samp),
@@ -344,40 +359,57 @@ rule postprocess_raw:
         lambda wildcards: expand(rules.bin_coverage.output, bin = get_bins(wildcards), samp = wildcards.samp),
         rules.label_bins.output
     output:
-        join(outdir, "{samp}/final/prokka.tmp"),
-        join(outdir, "{samp}/final/quast.tmp"),
-        join(outdir, "{samp}/final/checkm.tmp"),
-        join(outdir, "{samp}/final/trna.tmp"),
-        join(outdir, "{samp}/final/rrna.tmp"),
-        join(outdir, "{samp}/final/classify.tmp"),
-        join(outdir, "{samp}/final/coverage.tmp"),
+        prokka = join(outdir, "{samp}/final/prokka.tmp"),
+        quast = join(outdir, "{samp}/final/quast.tmp"),
+        checkm = join(outdir, "{samp}/final/checkm.tmp"),
+        trna = join(outdir, "{samp}/final/trna.tmp"),
+        rrna = join(outdir, "{samp}/final/rrna.tmp"),
+        classify = join(outdir, "{samp}/final/classify.tmp"),
+        coverage = join(outdir, "{samp}/final/coverage.tmp"),
     log:
         join(outdir, "{samp}/logs/postprocess.log")
     resources:
         mem=2,
         time=1
-    shell:
-        "(echo 'Sample Bin Coverage' | tr ' ' '\t'; " +
-            "cat {samp}/coverage/*.txt) > {samp}/final/coverage.tmp; " +
-        "(echo 'Sample Bin Genes' | tr ' ' '\t'; \
-            find {samp}/prokka/ -name '*.gff' | xargs grep -c CDS | cut -f4 -d '/' | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {samp}/final/prokka.tmp; " + \
-        "find {samp}/quast/ -name 'transposed_report.tsv' | xargs cat | sort -u | sed 's/^\(b..\)/{samp}\t\\1/g' | sed 's/^Assembly/Sample\tBin/g' > {samp}/final/quast.tmp; " + \
-        "cat {samp}/checkm/checkm.tsv " + " | sed 's/^\(b..\)/{samp}\t\\1/g' | sed 's/^Bin Id/Sample\tBin/g' > {samp}/final/checkm.tmp; " + \
-        "(echo 'Sample Bin tRNA' | tr ' ' '\\t'; \
-            ls {samp}/rna/trna/ | xargs -n 1 -I foo sh -c \"grep 'Number of' {samp}/rna/trna/foo | cut -f2 -d= | tr -d ' ' | tr '\\n' '+' | sed 's/+$//g' | xargs echo | bc | sed 's/^/foo\\t/g' \" | sed 's/^/{samp}\\t/g' | sed 's/.fa.txt//g') > {samp}/final/trna.tmp; " +
-        "(echo 'Sample Bin rna.16S rna.23S rna.5S' | tr ' ' '\t'; \
-            paste \
-            <(grep -c 16S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g') \
-            <(grep -c 23S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f3) \
-            <(grep -c 5S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f3) \
-            ) > {samp}/final/rrna.tmp; " + \
-        "(echo 'Sample Bin Majority.Class Majority.Fraction Size.Mb Final.Class' | tr ' ' '\t'; " +
-            "cat {samp}/classify/bin_species_calls.tsv" + " | sed 's/\.fa//g' | sed 's/^/{samp}\t/g') > {samp}/final/classify.tmp;"
-#grep Total {samp}/rna/trna/* | sed 's/\/rna\/trna\//\\t/g' | sed 's/.fa.txt:Total tRNA genes = /\\t/g') > {samp}/final/trna.tmp; " + \
+    params:
+        coverage_str = join(outdir, "{samp}/coverage/*.txt"),
+        prokka_str = join(outdir, "{samp}/prokka"),
+        quast_str = join(outdir, "{samp}/quast/"),
+        checkm_str = join(outdir, "{samp}/checkm/checkm.tsv"),
+        trna_str = join(outdir, "{samp}/rna/trna/*"),
+        rrna_str = join(outdir, "{samp}/rna/rrna/*"),
+        kraken_str = join(outdir, "{samp}/classify/bin_species_calls.tsv"),
+
+    shell: """
+        # coverage
+        (echo -e 'Sample\tBin\tCoverage'; cat {params.coverage_str}) > {output.coverage}
+        # prokka
+        (echo -e 'Sample\tBin\tGenes'; find {params.prokka_str} -name '*.gff' | xargs grep -c CDS | rev | cut -f1 -d '/' | rev | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {output.prokka}
+        # quast
+        find {params.quast_str} -name 'transposed_report.tsv' | xargs head -qn1 | sort -u | sed 's/^Assembly/Sample\tBin/g' > {output.quast}
+        find {params.quast_str} -name 'transposed_report.tsv' | xargs tail -qn+2 | sort -u | sed 's/^/{samp}\t/g' >> {output.quast}
+        # checkm
+        head -qn1 {params.checkm_str} | sed 's/^Bin Id/Sample\tBin/g' > {output.checkm}
+        tail -qn+2 {params.checkm_str} | sed 's/^/{samp}\t/g' >> {output.checkm}
+        # trna
+        (echo -e 'Sample\tBin\ttRNA'; grep Total {params.trna_str} | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g') > {output.trna}
+        #rrna
+        (echo -e 'Sample\tBin\trna.16S\trna.23S\trna.5S'; paste <(grep -c 16S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g') \
+        <(grep -c 23S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4) \
+        <(grep -c 5S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4)) > {output.rrna}
+        # classify
+        cat {params.kraken_str} | sed 's/\.fa//g' > {output.classify}
+        """
 
 rule postprocess_final:
     input:
-        rules.postprocess_raw.output
+        prokka = join(outdir, "{samp}/final/prokka.tmp"),
+        quast = join(outdir, "{samp}/final/quast.tmp"),
+        checkm = join(outdir, "{samp}/final/checkm.tmp"),
+        trna = join(outdir, "{samp}/final/trna.tmp"),
+        rrna = join(outdir, "{samp}/final/rrna.tmp"),
+        classify = join(outdir, "{samp}/final/classify.tmp"),
+        coverage = join(outdir, "{samp}/final/coverage.tmp"),
     output:
         join(outdir, "{samp}/final/{samp}.tsv")
     log:
@@ -386,6 +418,16 @@ rule postprocess_final:
         "shub://bsiranosian/bin_genomes:binning"
     script:
         "scripts/join_final_tables.R"
+
+rule postprocess_simplify:
+    input:
+        join(outdir, "{samp}/final/{samp}.tsv")
+    output:
+        join(outdir, "{samp}/final/{samp}_simple.tsv")
+    shell: """
+        # awk 'BEGIN {{FS="\t"}} {{OFS="\t"}} {{print($1,$2,$47,$50,$48,$49,$51,$40,$41,$42,$4,$23,$25,$26)}}' {input} > {output}
+        awk 'BEGIN {{FS="\t"}} {{OFS="\t"}} {{print($2,$1,$48,$49,$50,$51,$52,$53,$47,$54,$40,$41,$42,$4,$23,$25,$26)}}' {input} > {output}
+        """
 
 rule bin_tig_mapping:
     input:
@@ -396,3 +438,4 @@ rule bin_tig_mapping:
         "shub://bsiranosian/bin_genomes:binning"
     shell:
         "ls {samp}/bins/ | grep fai  | xargs -n 1 -I foo sh -c \"cat {samp}/bins/foo | sed 's/^/foo\t/g' \" | sed 's/.fa.fai//g' | cut -f1,2 > {output}"
+

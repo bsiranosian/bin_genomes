@@ -51,9 +51,9 @@ From: ubuntu:16.04
         export PATH="/usr/local/anaconda/bin:$PATH"
 
     # requirements for mgwf workflow 
-    conda install -y -c conda-forge -c bioconda -c ursky python=3.6 minimap2 \
+    conda install -y -c conda-forge -c bioconda -c ursky -c anaconda python=3.6 minimap2 \
     readline=6.2 r-ggplot2 r-doBy r-circlize prodigal aragorn metabat2 barrnap \
-    prokka samtools ncurses bedtools kraken2 bwa pip kraken2
+    prokka samtools ncurses bedtools kraken2 bwa pip kraken2 pandas requests
     
     # manual quast installation 
     apt-get install -y zlib1g-dev

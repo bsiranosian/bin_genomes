@@ -1,78 +1,82 @@
-#!/usr/bin/env python
-
+#!/usr/bin/env/python
 import sys
 import operator
 import os
+import requests
+import pandas as pd
 
-#input: 6753_d/classify/6753_d.tsv, 6753_d/bins/bin.1.fa.fai
-#    output: 6753_d/classify/bin_species_calls.tsv
 
-krakf = snakemake.input[0]
-binfaifs = snakemake.input[1:]
-binfolder = os.path.dirname(snakemake.input[1])
+krakf = snakemake.input["krak"]
+binfolder = snakemake.params["binfolder"]
 outf = snakemake.output[0]
 
-winning_margin = 60 #int(snakemake.input[1])
+# TODO: work with tree taxonomy stored locally instead
+# of requesting to ncbi for each...
+# requests module necessary to get NCBI taxonomy information
+def get_taxonomy_json(taxids):
+    # print(taxids)
+    url_base = 'http://taxonomy.jgi-psf.org/tax/id/ancestor/'
+    url = url_base + ','.join(taxids)
+    r = requests.get(url)
+    return r.json()
+
+
+binfaifs = [os.path.join(binfolder, f) for f in os.listdir(binfolder) if os.path.splitext(f)[-1] == '.fai']
+winning_margin = 66 #int(snakemake.input[1])
 
 tig_species = {}
 called_species = []
 
-with open(krakf, 'r') as krak:
-	with open(outf, 'w') as out:
-		for binfaif in binfaifs:
-			if os.path.splitext(binfaif)[-1] != '.fai':
-				continue
-			species_votes = {}
+# read kraken file
+krak = pd.read_csv(krakf, delimiter='\t', header=None, usecols=[1,2,3], index_col=0)
+krak.columns = ['taxid', 'size']
 
-			with open(binfaif, 'r') as binfai:
-				for l in krak.readlines():
-					s = l.rstrip().split("\t")
-					tig_species[s[1]] = '_'.join(s[2].split(' ')[0:2])
-				for l in binfai.readlines():
-					s = l.rstrip().split("\t")
-					if s[0] in tig_species:
-						species_vote = tig_species[s[0]]
-					else:
-						species_vote = 'unclassified'
-					votes = int(s[1])
+df_columns = ['Bin', 'Size.Mb','lca_species', 'lca_level', 'lca_fraction',
+              'best_species', 'best_level', 'best_fraction']
+out_df = pd.DataFrame(columns=df_columns)
+for binfaif in binfaifs:
+    species_votes = {}
 
-					species_votes.setdefault(species_vote, 0)
-					species_votes[species_vote] = species_votes[species_vote] + votes
+    bin_size = 0
+    fai_df = pd.read_csv(binfaif, delimiter='\t', header=None)
+    for index, row in fai_df.iterrows():
+        contig = row[0]
+        # number of votes = contig length
+        votes = int(row[1])
+        taxid = krak.loc[contig, 'taxid']
+        species_votes.setdefault(taxid, 0)
+        species_votes[taxid] = species_votes[taxid] + votes
+        bin_size += krak.loc[contig,'size']
 
-			verbose = False
-			if verbose:
+    species_votes_sorted = sorted(species_votes.items(), key=operator.itemgetter(1))
+    total_votes = sum(species_votes.values())
+    vote_thresh = total_votes * winning_margin / 100
+    taxid_list = []
+    accum_votes = 0
+    size_mb = round(bin_size /1000000, 2)
 
-				for idx in species_votes:
-					print(idx + "\t" + str(
-						round(100*species_votes[idx] /
-							float(
-								sum(
-									species_votes.values()
-									)
-								)
-							, 3)
-						)
-					)
+    # take LCA of species that collectively make up 2/3 of the bin
+    while accum_votes <= vote_thresh:
+        species_tuple = species_votes_sorted.pop()
+        taxid_list.append(str(species_tuple[0]))
+        accum_votes += species_tuple[1]
 
-			winning_species = max(species_votes.items(), key=operator.itemgetter(1))[0]
-			winning_fraction = 100*max(species_votes.values())/float(sum(species_votes.values()))
-			total_votes = sum(species_votes.values())
-			bin = binfaif.split("/")[-1].replace('.fai', '')
+    species_votes_sorted = sorted(species_votes.items(), key=operator.itemgetter(1))
+    best_json = get_taxonomy_json([str(species_votes_sorted[-1][0])])
+    best_species = best_json['name']
+    best_level = best_json['level']
+    best_fraction = species_votes_sorted[-1][1] / total_votes
+    
+    lca_json = get_taxonomy_json(taxid_list)
+    lca_species = lca_json['name']
+    lca_level = lca_json['level']
+    lca_fraction = accum_votes / total_votes
 
-			if winning_fraction > winning_margin:
-				final_class = winning_species
-			else:
-				final_class = winning_species.split('_')[0]
-
-
-			tmp = final_class
-	#		final_class += "_" + str(called_species.count(final_class))
-			called_species.append(tmp)
-
-			out.write('\t'.join([
-				bin,
-				winning_species,
-				str(round(winning_fraction, 3)),
-				str(round(total_votes/float(1000000),2)),
-				final_class
-			]) + "\n")
+    bin = binfaif.split("/")[-1].replace('.fai', '')
+    
+    fai_df = pd.DataFrame([bin, size_mb, lca_species, lca_level,
+                           round(lca_fraction,3), best_species,
+                           best_level, round(best_fraction,3)]).transpose()
+    fai_df.columns = df_columns
+    out_df = out_df.append(fai_df)
+out_df.to_csv(outf, sep='\t', index=False)
