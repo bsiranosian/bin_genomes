@@ -11,3 +11,6 @@ reads2: /abs/path/reads_2.fq.gz
 kraken2db: /labs/asbhatt/data/program_indices/kraken2/kraken_custom_feb2019/genbank_genome_chromosome_scaffold/
 read_length: 150 #mean read length
 long_read: False
+
+# are we using a non-standard (non ncbi) taxonomy
+custom_taxonomy: False

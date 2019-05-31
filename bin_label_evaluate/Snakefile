@@ -5,6 +5,11 @@ localrules: bwa_index_setup, postprocess_raw, postprocess_simplify, postprocess_
 
 samp = config['sample']
 outdir = config['outdir_base']
+# are we using a non-standard (non ncbi) taxonomy
+if 'custom_taxonomy' in config:
+    custom_taxonomy = config['custom_taxonomy']
+else:
+    custom_taxonomy = False
 
 # convert outdir to absolute path
 if outdir[0] == '~':
@@ -345,7 +350,8 @@ rule label_bins:
     singularity:
         "shub://bsiranosian/bin_genomes:binning"
     params: 
-        binfolder = join(outdir, "{samp}/bins/")
+        binfolder = join(outdir, "{samp}/bins/"),
+        custom_taxonomy = custom_taxonomy
     script:
         "scripts/assign_species.py"
 

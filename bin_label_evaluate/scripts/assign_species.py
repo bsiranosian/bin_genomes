@@ -9,6 +9,7 @@ import pandas as pd
 krakf = snakemake.input["krak"]
 binfolder = snakemake.params["binfolder"]
 outf = snakemake.output[0]
+custom_taxonomy = snakemake.params["custom_taxonomy"]
 
 # TODO: work with tree taxonomy stored locally instead
 # of requesting to ncbi for each...
@@ -62,30 +63,43 @@ for binfaif in binfaifs:
         accum_votes += species_tuple[1]
 
     species_votes_sorted = sorted(species_votes.items(), key=operator.itemgetter(1))
+    best_fraction = species_votes_sorted[-1][1] / total_votes
     best_taxid = species_votes_sorted[-1][0]
+    # ensure best taxid is not zero, aka unclassified
     if best_taxid != 0:
-        best_json = get_taxonomy_json([str(best_taxid)])
-        if 'name' in best_json and 'level' in best_json:
-            best_species = best_json['name']
-            best_level = best_json['level']
+        if not custom_taxonomy:
+            best_json = get_taxonomy_json([str(best_taxid)])
+            if 'name' in best_json and 'level' in best_json:
+                best_species = best_json['name']
+                best_level = best_json['level']
+            else:
+                best_species = "CLASSIFICATION ERROR"
+                best_level = "CLASSIFICATION ERROR"
+        # if working with custom taxonomy
         else:
-            best_species = "CLASSIFICATION ERROR"
-            best_level = "CLASSIFICATION ERROR"
-
+            best_species = best_taxid
+            best_level = 'Custom'
     else:
         best_species = 'Unclassified'
         best_level = 'Unclassified'
-    best_fraction = species_votes_sorted[-1][1] / total_votes
-    
-    lca_json = get_taxonomy_json(taxid_list)
-    if 'name' in lca_json and 'level' in lca_json:
-        lca_species = lca_json['name']
-        lca_level = lca_json['level']
-    else:
-        lca_species = "CLASSIFICATION ERROR"
-        lca_level = "CLASSIFICATION ERROR"
-    lca_fraction = accum_votes / total_votes
 
+    # LCA calculations
+    lca_fraction = accum_votes / total_votes
+    # LCA name from ncbi request
+    if not custom_taxonomy:
+        lca_json = get_taxonomy_json(taxid_list)
+        if 'name' in lca_json and 'level' in lca_json:
+            lca_species = lca_json['name']
+            lca_level = lca_json['level']
+        else:
+            lca_species = "CLASSIFICATION ERROR"
+            lca_level = "CLASSIFICATION ERROR"
+    # if custom taxonomy
+    else:
+        # best we can do now is report all of them 
+        lca_species = ", ".join([str(a) for a in taxid_list])
+        lca_level = "Custom"
+        
     bin = binfaif.split("/")[-1].replace('.fai', '')
     
     fai_df = pd.DataFrame([bin, size_mb, lca_species, lca_level,
