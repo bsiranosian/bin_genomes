@@ -62,14 +62,28 @@ for binfaif in binfaifs:
         accum_votes += species_tuple[1]
 
     species_votes_sorted = sorted(species_votes.items(), key=operator.itemgetter(1))
-    best_json = get_taxonomy_json([str(species_votes_sorted[-1][0])])
-    best_species = best_json['name']
-    best_level = best_json['level']
+    best_taxid = species_votes_sorted[-1][0]
+    if best_taxid != 0:
+        best_json = get_taxonomy_json([str(best_taxid)])
+        if 'name' in best_json and 'level' in best_json:
+            best_species = best_json['name']
+            best_level = best_json['level']
+        else:
+            best_species = "CLASSIFICATION ERROR"
+            best_level = "CLASSIFICATION ERROR"
+
+    else:
+        best_species = 'Unclassified'
+        best_level = 'Unclassified'
     best_fraction = species_votes_sorted[-1][1] / total_votes
     
     lca_json = get_taxonomy_json(taxid_list)
-    lca_species = lca_json['name']
-    lca_level = lca_json['level']
+    if 'name' in lca_json and 'level' in lca_json:
+        lca_species = lca_json['name']
+        lca_level = lca_json['level']
+    else:
+        lca_species = "CLASSIFICATION ERROR"
+        lca_level = "CLASSIFICATION ERROR"
     lca_fraction = accum_votes / total_votes
 
     bin = binfaif.split("/")[-1].replace('.fai', '')

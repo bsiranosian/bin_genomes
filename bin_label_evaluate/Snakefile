@@ -384,7 +384,7 @@ rule postprocess_raw:
         # coverage
         (echo -e 'Sample\tBin\tCoverage'; cat {params.coverage_str}) > {output.coverage}
         # prokka
-        (echo -e 'Sample\tBin\tGenes'; find {params.prokka_str} -name '*.gff' | xargs grep -c CDS | rev | cut -f1 -d '/' | rev | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {output.prokka}
+        (echo -e 'Sample\tBin\tGenes'; find {params.prokka_str} -name '*.gff' | xargs grep -H -c CDS | rev | cut -f1 -d '/' | rev | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {output.prokka}
         # quast
         find {params.quast_str} -name 'transposed_report.tsv' | xargs head -qn1 | sort -u | sed 's/^Assembly/Sample\tBin/g' > {output.quast}
         find {params.quast_str} -name 'transposed_report.tsv' | xargs tail -qn+2 | sort -u | sed 's/^/{samp}\t/g' >> {output.quast}
@@ -392,11 +392,11 @@ rule postprocess_raw:
         head -qn1 {params.checkm_str} | sed 's/^Bin Id/Sample\tBin/g' > {output.checkm}
         tail -qn+2 {params.checkm_str} | sed 's/^/{samp}\t/g' >> {output.checkm}
         # trna
-        (echo -e 'Sample\tBin\ttRNA'; grep Total {params.trna_str} | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g' | awk '{{ print  gensub( ".*/", "", "a") }}' ) > {output.trna}
+        (echo -e 'Sample\tBin\ttRNA'; grep -H Total {params.trna_str} | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g' | awk '{{ print  gensub( ".*/", "", "a") }}' ) > {output.trna}
         #rrna
-        (echo -e 'Sample\tBin\trna.16S\trna.23S\trna.5S'; paste <(grep -c 16S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g') \
-        <(grep -c 23S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4) \
-        <(grep -c 5S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4)) |  awk '{{ print  gensub( ".*/", "", "a") }}' > {output.rrna}
+        (echo -e 'Sample\tBin\trna.16S\trna.23S\trna.5S'; paste <(grep -H -c 16S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g') \
+        <(grep -H -c 23S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4) \
+        <(grep -H -c 5S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4)) |  awk '{{ print  gensub( ".*/", "", "a") }}' > {output.rrna}
         # classify
         cat {params.kraken_str} | sed 's/\.fa//g' > {output.classify}
         """
