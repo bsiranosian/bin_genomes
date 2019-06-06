@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from os.path import join, abspath, expanduser
 
-localrules: bwa_index_setup, postprocess_raw, postprocess_simplify, postprocess_final, label_bins, bin_tig_mapping, metabat, fasta_index
+localrules: bwa_index_setup, postprocess, label_bins, bin_tig_mapping, metabat, fasta_index
 
 samp = config['sample']
 outdir = config['outdir_base']
@@ -201,7 +201,7 @@ rule quast:
     input:
         join(outdir, "{samp}/bins/{bin}.fa")
     output:
-        join(outdir, "{samp}/quast/{bin}.fa/report.txt")
+        join(outdir, "{samp}/quast/{bin}.fa/report.tsv")
     log:
         join(outdir, "{samp}/logs/quast_{bin}.log")
     singularity:
@@ -355,93 +355,30 @@ rule label_bins:
     script:
         "scripts/assign_species.py"
 
-rule postprocess_raw:
+rule postprocess:
     input:
-        join(outdir, "{samp}/checkm/checkm.tsv"),
-        lambda wildcards: expand(rules.prokka.output, bin = get_bins(wildcards), samp = wildcards.samp),
-        lambda wildcards: expand(rules.quast.output, bin = get_bins(wildcards), samp = wildcards.samp),
-        lambda wildcards: expand(rules.aragorn.output, bin = get_bins(wildcards), samp = wildcards.samp),
-        lambda wildcards: expand(rules.barrnap.output, bin = get_bins(wildcards), samp = wildcards.samp),
-        lambda wildcards: expand(rules.bin_coverage.output, bin = get_bins(wildcards), samp = wildcards.samp),
-        rules.label_bins.output
+        prokka = lambda wildcards: expand(rules.prokka.output, bin = get_bins(wildcards), samp = wildcards.samp),
+        quast = lambda wildcards: expand(rules.quast.output, bin = get_bins(wildcards), samp = wildcards.samp),
+        checkm = join(outdir, "{samp}/checkm/checkm.tsv"),
+        trna = lambda wildcards: expand(rules.aragorn.output, bin = get_bins(wildcards), samp = wildcards.samp),
+        rrna = lambda wildcards: expand(rules.barrnap.output, bin = get_bins(wildcards), samp = wildcards.samp),
+        classify = rules.label_bins.output,
+        coverage = lambda wildcards: expand(rules.bin_coverage.output, bin = get_bins(wildcards), samp = wildcards.samp),
     output:
-        prokka = join(outdir, "{samp}/final/prokka.tmp"),
-        quast = join(outdir, "{samp}/final/quast.tmp"),
-        checkm = join(outdir, "{samp}/final/checkm.tmp"),
-        trna = join(outdir, "{samp}/final/trna.tmp"),
-        rrna = join(outdir, "{samp}/final/rrna.tmp"),
-        classify = join(outdir, "{samp}/final/classify.tmp"),
-        coverage = join(outdir, "{samp}/final/coverage.tmp"),
-    log:
-        join(outdir, "{samp}/logs/postprocess.log")
-    resources:
-        mem=2,
-        time=1
+        full = join(outdir, "{samp}/final/{samp}.tsv"),
+        simple = join(outdir, "{samp}/final/{samp}_simple.tsv")
     params:
-        coverage_str = join(outdir, "{samp}/coverage/*.txt"),
-        prokka_str = join(outdir, "{samp}/prokka"),
-        quast_str = join(outdir, "{samp}/quast/"),
-        checkm_str = join(outdir, "{samp}/checkm/checkm.tsv"),
-        trna_str = join(outdir, "{samp}/rna/trna/*"),
-        rrna_str = join(outdir, "{samp}/rna/rrna/*"),
-        kraken_str = join(outdir, "{samp}/classify/bin_species_calls.tsv"),
+        bins = lambda wildcards: get_bins(wildcards),
+        sample = samp
+    script: "scripts/postprocess.R"
 
-    shell: """
-        # coverage
-        (echo -e 'Sample\tBin\tCoverage'; cat {params.coverage_str}) > {output.coverage}
-        # prokka
-        (echo -e 'Sample\tBin\tGenes'; find {params.prokka_str} -name '*.gff' | xargs grep -H -c CDS | rev | cut -f1 -d '/' | rev | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {output.prokka}
-        # quast
-        find {params.quast_str} -name 'transposed_report.tsv' | xargs head -qn1 | sort -u | sed 's/^Assembly/Sample\tBin/g' > {output.quast}
-        find {params.quast_str} -name 'transposed_report.tsv' | xargs tail -qn+2 | sort -u | sed 's/^/{samp}\t/g' >> {output.quast}
-        # checkm
-        head -qn1 {params.checkm_str} | sed 's/^Bin Id/Sample\tBin/g' > {output.checkm}
-        tail -qn+2 {params.checkm_str} | sed 's/^/{samp}\t/g' >> {output.checkm}
-        # trna
-        (echo -e 'Sample\tBin\ttRNA'; grep -H Total {params.trna_str} | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g' | awk '{{ print  gensub( ".*/", "", "a") }}' ) > {output.trna}
-        #rrna
-        (echo -e 'Sample\tBin\trna.16S\trna.23S\trna.5S'; paste <(grep -H -c 16S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g') \
-        <(grep -H -c 23S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4) \
-        <(grep -H -c 5S {params.rrna_str} | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f4)) |  awk '{{ print  gensub( ".*/", "", "a") }}' > {output.rrna}
-        # classify
-        cat {params.kraken_str} | sed 's/\.fa//g' > {output.classify}
-        """
-
-rule postprocess_final:
-    input:
-        prokka = join(outdir, "{samp}/final/prokka.tmp"),
-        quast = join(outdir, "{samp}/final/quast.tmp"),
-        checkm = join(outdir, "{samp}/final/checkm.tmp"),
-        trna = join(outdir, "{samp}/final/trna.tmp"),
-        rrna = join(outdir, "{samp}/final/rrna.tmp"),
-        classify = join(outdir, "{samp}/final/classify.tmp"),
-        coverage = join(outdir, "{samp}/final/coverage.tmp"),
-    output:
-        join(outdir, "{samp}/final/{samp}.tsv")
-    log:
-        join(outdir, "{samp}/logs/postprocess.log")
-    singularity:
-        "shub://bsiranosian/bin_genomes:binning"
-    script:
-        "scripts/join_final_tables.R"
-
-rule postprocess_simplify:
-    input:
-        join(outdir, "{samp}/final/{samp}.tsv")
-    output:
-        join(outdir, "{samp}/final/{samp}_simple.tsv")
-    shell: """
-        # awk 'BEGIN {{FS="\t"}} {{OFS="\t"}} {{print($1,$2,$47,$50,$48,$49,$51,$40,$41,$42,$4,$23,$25,$26)}}' {input} > {output}
-        awk 'BEGIN {{FS="\t"}} {{OFS="\t"}} {{print($2,$1,$48,$49,$50,$51,$52,$53,$47,$54,$40,$41,$42,$4,$23,$25,$26)}}' {input} > {output}
-        """
-
-rule bin_tig_mapping:
-    input:
-        rules.postprocess_final.output
-    output:
-        join(outdir, "{samp}/final/bin_tig_mapping.tsv")
-    singularity:
-        "shub://bsiranosian/bin_genomes:binning"
-    shell:
-        "ls {samp}/bins/ | grep fai  | xargs -n 1 -I foo sh -c \"cat {samp}/bins/foo | sed 's/^/foo\t/g' \" | sed 's/.fa.fai//g' | cut -f1,2 > {output}"
+# rule bin_tig_mapping:
+#     input:
+#         rules.postprocess_final.output
+#     output:
+#         join(outdir, "{samp}/final/bin_tig_mapping.tsv")
+#     singularity:
+#         "shub://bsiranosian/bin_genomes:binning"
+#     shell:
+#         "ls {samp}/bins/ | grep fai  | xargs -n 1 -I foo sh -c \"cat {samp}/bins/foo | sed 's/^/foo\t/g' \" | sed 's/.fa.fai//g' | cut -f1,2 > {output}"
 
