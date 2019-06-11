@@ -121,8 +121,6 @@ for (b in bins){
 coverage.df <- do.call(rbind, coverage.list)
 colnames(coverage.df) <- c('Sample', 'Bin', 'Coverage')
 
-
-sample.name <- 'p4018_2016-01-13'
 # merge them all together
 out.df <- data.frame(Bin=bins,
                      Sample=sample.name, 
